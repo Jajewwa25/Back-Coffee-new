@@ -101,6 +101,7 @@ const Item = sequelize.define("Item", {
   },
 });
 
+// Order Model
 const Order = sequelize.define("Order", {
   order_id: {
     type: Sequelize.INTEGER,
@@ -111,8 +112,13 @@ const Order = sequelize.define("Order", {
     type: Sequelize.INTEGER,
     allowNull: false,
   },
+  total_price: {
+    type: Sequelize.INTEGER,
+    allowNull: false,
+  },
 });
 
+// OrderItem Model
 const OrderItem = sequelize.define("OrderItem", {
   order_item_id: {
     type: Sequelize.INTEGER,
@@ -131,9 +137,12 @@ const OrderItem = sequelize.define("OrderItem", {
     type: Sequelize.INTEGER,
     allowNull: false,
   },
-});
-
-// Associations
+  price: {
+    type: Sequelize.INTEGER,
+    allowNull: false,
+  },
+}); // Associat
+// ions
 Order.hasMany(OrderItem, { foreignKey: "order_id" });
 OrderItem.belongsTo(Order, { foreignKey: "order_id" });
 
@@ -571,15 +580,50 @@ app.get("/Order/:id", (req, res) => {
 
 app.post("/Order", async (req, res) => {
   try {
-    const sale = await Order.create({
-      customer_id: req.body.customer_id,
-      item_id: req.body.item_id,
-      qty: req.body.qty,
+    const { customer_id, item_id, qty } = req.body;
+
+    const items = item_id.map((id, index) => ({
+      item_id: parseInt(id),
+      qty: parseInt(qty[index]),
+    }));
+
+    let totalPrice = 0;
+    for (const item of items) {
+      const product = await Item.findByPk(item.item_id);
+      if (!product) {
+        return res
+          .status(400)
+          .json({ message: `Item ${item.item_id} not found` });
+      }
+      totalPrice += product.price * item.qty;
+    }
+
+    const newOrder = await Order.create({
+      customer_id: customer_id,
+      total_price: totalPrice,
     });
-    res.send(sale);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Internal Server Error");
+
+    await Promise.all(
+      items.map(async (item) => {
+        const product = await Item.findByPk(item.item_id);
+        await OrderItem.create({
+          order_id: newOrder.order_id,
+          item_id: item.item_id,
+          qty: item.qty,
+          price: product.price, // ใส่ราคาต่อหน่วยลงไปตรงนี้
+        });
+      })
+    );
+
+    res
+      .status(201)
+      .json({
+        message: "Order placed successfully",
+        order_id: newOrder.order_id,
+      });
+  } catch (error) {
+    console.error("Failed to place order:", error);
+    res.status(500).json({ message: "Failed to place order" });
   }
 });
 
@@ -624,84 +668,6 @@ app.delete("/Order/:id", (req, res) => {
 });
 
 //OrderItem
-
-app.get("/OrderItem", (req, res) => {
-  OrderItem.findAll()
-    .then((OrderItems) => {
-      res.json(OrderItems);
-    })
-    .catch((err) => {
-      res.status(500).send(err);
-    });
-});
-
-app.get("/OrderItem/:id", (req, res) => {
-  OrderItem.findByPk(req.params.id)
-    .then((OrderItem) => {
-      if (!OrderItem) {
-        res.status(404).send("OrderItem not found");
-      } else {
-        res.json(OrderItem);
-      }
-    })
-    .catch((err) => {
-      res.status(500).send(err);
-    });
-});
-
-app.post("/OrderItem", async (req, res) => {
-  try {
-    const orderItem = await OrderItem.create({
-      order_id: req.body.order_id,
-      item_id: req.body.item_id,
-      qty: req.body.qty,
-    });
-    res.status(201).send(orderItem);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Internal Server Error");
-  }
-});
-
-app.put("/OrderItem/:id", (req, res) => {
-  OrderItem.findByPk(req.params.id)
-    .then((OrderItem) => {
-      if (!OrderItem) {
-        res.status(404).send("OrderItem not found");
-      } else {
-        OrderItem.update(req.body)
-          .then(() => {
-            res.json(OrderItem);
-          })
-          .catch((err) => {
-            res.status(500).send(err);
-          });
-      }
-    })
-    .catch((err) => {
-      res.status(500).send(err);
-    });
-});
-
-app.delete("/OrderItem/:id", (req, res) => {
-  OrderItem.findByPk(req.params.id)
-    .then((OrderItem) => {
-      if (!OrderItem) {
-        res.status(404).send("OrderItem not found");
-      } else {
-        OrderItem.destroy()
-          .then(() => {
-            res.send({});
-          })
-          .catch((err) => {
-            res.status(500).send(err);
-          });
-      }
-    })
-    .catch((err) => {
-      res.status(500).send(err);
-    });
-});
 
 const port = process.env.PORT || 3000;
 app.listen(port, () =>
