@@ -146,6 +146,12 @@ const OrderItem = sequelize.define("OrderItem", {
 Order.hasMany(OrderItem, { foreignKey: "order_id" });
 OrderItem.belongsTo(Order, { foreignKey: "order_id" });
 
+OrderItem.belongsTo(Item, { foreignKey: "item_id" });
+Item.hasMany(OrderItem, { foreignKey: "item_id" });
+
+Order.belongsTo(Customer, { foreignKey: "customer_id" });
+Customer.hasMany(Order, { foreignKey: "customer_id" });
+
 sequelize.sync();
 //-----------------Address------------------------
 
@@ -505,39 +511,6 @@ app.get("/menu1", (req, res) => {
 
 //----------------Order--------------------------
 
-/*app.get("/Order", (req, res) => {
-  Order.findAll()
-    .then((Order) => {
-      Item.findAll().then((Item) => {
-        Customer.findAll().then((Customer) => {
-          let orderarr = [];
-          let customerarr = [];
-          let itemarr = [];
-          orderarr.push(Order);
-          for (let i = 0; i < Order.length; i++) {
-            for (let j = 0; j < Item.length; j++) {
-              if (Order[i].item_id == Item[j].item_id) {
-                itemarr.push(Item[j]);
-              }
-            }
-          }
-          for (let i = 0; i < Order.length; i++) {
-            for (let j = 0; j < Customer.length; j++) {
-              if (Order[i].customer_id == Customer[j].customer_id) {
-                customerarr.push(Customer[j]);
-              }
-            }
-          }
-          arr = [orderarr, itemarr, customerarr];
-          res.json(arr);
-        });
-      });
-    })
-    .catch((err) => {
-      res.status(500).send(err);
-    });
-});*/
-
 app.get("/Order", async (req, res) => {
   try {
     const orders = await Order.findAll();
@@ -615,12 +588,10 @@ app.post("/Order", async (req, res) => {
       })
     );
 
-    res
-      .status(201)
-      .json({
-        message: "Order placed successfully",
-        order_id: newOrder.order_id,
-      });
+    res.status(201).json({
+      message: "Order placed successfully",
+      order_id: newOrder.order_id,
+    });
   } catch (error) {
     console.error("Failed to place order:", error);
     res.status(500).json({ message: "Failed to place order" });
@@ -668,6 +639,33 @@ app.delete("/Order/:id", (req, res) => {
 });
 
 //OrderItem
+app.get("/OrderWithItem", async (req, res) => {
+  try {
+    const orders = await Order.findAll({
+      include: [
+        {
+          model: Customer,
+          attributes: ["customer_id", "username", "email"],
+        },
+        {
+          model: OrderItem,
+          include: [
+            {
+              model: Item,
+              attributes: ["itemname", "price", "img"],
+            },
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.json(orders);
+  } catch (err) {
+    console.error("❌ Error in /OrderWithItems:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 const port = process.env.PORT || 3000;
 app.listen(port, () =>
